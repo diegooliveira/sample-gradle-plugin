@@ -1,0 +1,102 @@
+
+
+apply plugin: 'java'
+apply plugin: 'application'
+apply plugin: MesosRelease
+
+mainClassName = 'edu.gradle.Test'
+
+apply plugin: MesosRelease
+
+class MesosRelease implements Plugin<Project> {
+	
+    void apply(Project project) {
+    	// Registering the mesos release extension
+    	project.extensions.create("mesosRelease", MesosReleaseExtension)
+    	project.mesosRelease.extensions.create("deployDescriptor", UpgradeDeployDescriptorExtension)
+    	
+    	// Registering the main task
+    	project.task('bumpVersion', type: BumpVersionTask)
+    	project.task('updateDesploymentDescription', type: UpgradeDeploymentDescriptorTask)
+        project.task('mesosRelease', type: MesosReleaseTask, 
+        	dependsOn: [ project.clean, project.bumpVersion, 
+        		project.updateDesploymentDescription, project.distTar])
+    }
+}
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+// Incrementa a versão do projeto
+class BumpVersionTask extends DefaultTask {
+
+	@TaskAction
+	def bumpVersion() {
+		Matcher versionMetcher = Pattern.compile(/(\d+)\.(\d+)\.(\d+)/).matcher("${project.version}")
+		if (versionMetcher.find()){
+			def major = Integer.parseInt(versionMetcher.group(1));
+			def minor = Integer.parseInt(versionMetcher.group(2));
+			def patch = Integer.parseInt(versionMetcher.group(3));
+			
+			// Increase patch
+			patch = patch + 1
+			
+			def oldVersion="version=${project.version}";
+			def newVersion="version=${major}.${minor}.${patch}";
+		
+			project.version = "${major}.${minor}.${patch}"
+		
+			def gradleProps = new File("gradle.properties");
+			def text = gradleProps.text;
+			gradleProps.withWriter { out ->
+				out << text.replaceAll(oldVersion, newVersion);
+			}
+		}
+	}
+}
+
+class UpgradeDeploymentDescriptorTask extends DefaultTask {
+	
+	@TaskAction
+	def showMessage() {
+		def oldVersion="${project.applicationName}-(\\d+)\\.(\\d+)\\.(\\d+)"
+		def newVersion="${project.applicationName}-${project.version}"
+		def dir = new File("${project.mesosRelease.deployDescriptor.folder}")
+		dir.eachFile() { file ->
+			
+			def deployeDescriptor = file;
+			def text = deployeDescriptor.text;
+			deployeDescriptor.withWriter { out ->
+				out << text.replaceAll(oldVersion, newVersion);
+			}
+		}	
+	}
+}
+
+class UpgradeDeployDescriptorExtension {
+	def String folder = "deploy";
+}
+
+
+class MesosReleaseExtension {
+	def String host = "Host";
+}
+
+class MesosReleaseTask extends DefaultTask {
+
+	@TaskAction
+	def showMessage() {
+		println "${project.mesosRelease.host}";
+		println '----------showMessage-------------'
+	}
+	
+}
+
+
+// Incrementar o numero de versao  == OK
+// Atualizar os arquivos de deploy 
+// Fazer p commit e o push
+// Fazer o build
+// Publicar os artefatos
+// Publicar os projetos
+
